@@ -19,11 +19,6 @@ Read-only result charts live here:
   builds.
 - `docs/outputs.md`: short guide to generated output files.
 
-The local `subfits/`, `vlkb-soda/`, and `dug-results/` directories from the
-original working copy are intentionally ignored. They are useful local
-development material, but they include upstream repos, generated results, and
-site/private config examples that should not be pushed to a public repo.
-
 ## Quick Start
 
 List the available entry points:
