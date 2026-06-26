@@ -6,8 +6,6 @@ documentation; generated results stay out of Git.
 
 Read-only result charts live here:
 [Google Sheets](https://docs.google.com/spreadsheets/d/1fqtih-dpWI-U3thO6vFlC2-0xWzZt9RkxW_pbnnUV74/edit?usp=sharing).
-GitHub controls README link behavior; use Cmd-click, Ctrl-click, or your browser
-context menu to open it in a new tab.
 
 ## What Is Here
 
