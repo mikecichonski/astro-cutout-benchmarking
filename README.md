@@ -5,7 +5,7 @@ clusters and CANFAR. The repo focuses on runnable benchmark code and
 documentation; generated results stay out of Git.
 
 Read-only result charts live here:
-[Google Sheets](https://docs.google.com/spreadsheets/d/1fqtih-dpWI-U3thO6vFlC2-0xWzZt9RkxW_pbnnUV74/edit?usp=sharing).
+<a href="https://docs.google.com/spreadsheets/d/1fqtih-dpWI-U3thO6vFlC2-0xWzZt9RkxW_pbnnUV74/edit?usp=sharing" target="_blank" rel="noopener noreferrer">Google Sheets</a>.
 
 ## What Is Here
 
