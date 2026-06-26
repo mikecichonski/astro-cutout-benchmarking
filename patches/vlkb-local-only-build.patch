@@ -1,0 +1,160 @@
+diff --git a/data-access/engine/src/vlkb/Makefile b/data-access/engine/src/vlkb/Makefile
+index 8511125..91030b5 100644
+--- a/data-access/engine/src/vlkb/Makefile
++++ b/data-access/engine/src/vlkb/Makefile
+@@ -5,13 +5,14 @@ DEBUG_LEV=-v1
+ INSTALL_DIR=/usr/local
+ VERSION ?= $(shell git describe)
+ TAR_NAME := `basename $(PWD)`
++NO_DAVIX ?= 0
++NO_CSV ?= 0
+ #================================================================================
+ DEPS_DIR := ../common ../../ext/aria-csv ../../ext/nlohmann-json
+ DEPS_INC := $(foreach d, $(DEPS_DIR), $d/include)
+ DEPS_LIB := $(foreach d, $(DEPS_DIR), $d/lib)
+ #================================================================================
+ INC_DIR = $(DEPS_INC) \
+-	  /usr/include/davix \
+ 	  /usr/include/cfitsio \
+ 	  /usr/local/include \
+ 	  /usr/local/cfitsio/include
+@@ -19,16 +20,34 @@ LIB_DIR = $(DEPS_LIB) \
+ 	  /usr/local/lib \
+ 	  /usr/local/cfitsio/lib
+ #================================================================================
++ifeq ($(NO_DAVIX),1)
++DAVIX_INC :=
++DAVIX_LIB :=
++DAVIX_SRC := $(SRC_DIR)/imcopydav.cpp
++VLKB_WITH_DAVIX := 0
++else
++DAVIX_INC := /usr/include/davix
++DAVIX_LIB := -ldavix
++DAVIX_SRC :=
++VLKB_WITH_DAVIX := 1
++endif
++
++ifeq ($(NO_CSV),1)
++CSV_LIB :=
++else
++CSV_LIB := -lcsv
++endif
++
+ CC=g++
+ CFLAGS_DEBUG   = -g -DFDB_DEBUG
+ CFLAGS_RELEASE = -O2 
+ FLAGS_COMMON   = -fPIC -Wall -Wextra -Wconversion -fno-common -pthread -DVERSIONSTR='"$(VERSION)"' \
+ -DBUILD='"$(shell LANG=us_US date; hostname)"'
+-CFLAGS_COMMON   = -c -Wstrict-prototypes $(FLAGS_COMMON)
++CFLAGS_COMMON   = -c -Wstrict-prototypes $(FLAGS_COMMON) -DVLKB_WITH_DAVIX=$(VLKB_WITH_DAVIX)
+ CXX_DEBUG_FLAGS   = -g -DVERBOSE_DEBUG -DFDB_DEBUG
+ CXX_RELEASE_FLAGS = -O3
+ CXX_DEFAULT_FLAGS = -c -std=c++11 $(FLAGS_COMMON)
+-LDFLAGS = -Wall -lvlkbcommon -ldavix -lcfitsio -lcsv -last -last_pal -last_cminpack -last_grf_2.0 -last_grf_3.2 -last_grf_5.6 -last_grf3d -last_err -lstdc++ -lm  
++LDFLAGS = -Wall -lvlkbcommon $(DAVIX_LIB) -lcfitsio $(CSV_LIB) -last -last_pal -last_cminpack -last_grf_2.0 -last_grf_3.2 -last_grf_5.6 -last_grf3d -last_err -lstdc++ -lm  
+ INC_PARM=$(foreach d, $(INC_DIR), -I$d)
+ LIB_PARM=$(foreach d, $(LIB_DIR), -L$d)
+ #================================================================================
+@@ -36,11 +55,11 @@ EXT_DIR = ext
+ SRC_DIR = src
+ OBJ_DIR = obj
+ BIN_DIR = bin
+-INC_PARM += -I$(EXT_DIR)/include -I$(SRC_DIR)
++INC_PARM += -I$(EXT_DIR)/include -I$(SRC_DIR) $(foreach d, $(DAVIX_INC), -I$d)
+ LIB_PARM += -L$(EXT_DIR)/lib
+ #================================================================================
+ EXECUTABLE = $(BIN_DIR)/$(EXEC_NAME)
+-CPP_FILES  = $(wildcard $(SRC_DIR)/*.cpp)
++CPP_FILES  = $(filter-out $(DAVIX_SRC),$(wildcard $(SRC_DIR)/*.cpp))
+ OBJ_FILES  = $(addprefix $(OBJ_DIR)/,$(notdir $(CPP_FILES:.cpp=.o))) 
+ #================================================================================
+ NPROCS = $(shell grep -c 'processor' /proc/cpuinfo)
+diff --git a/data-access/engine/src/vlkb/src/main.cpp b/data-access/engine/src/vlkb/src/main.cpp
+index c23d0ad..06de4e0 100644
+--- a/data-access/engine/src/vlkb/src/main.cpp
++++ b/data-access/engine/src/vlkb/src/main.cpp
+@@ -5,7 +5,9 @@
+ #include "multicutout.hpp"
+ #include "ast.hpp"
+ #include "imcopy.hpp" // imcopy() vlkb_cutout()
++#if VLKB_WITH_DAVIX
+ #include "imcopydav.hpp" // imcopydav()
++#endif
+ #include "ast4vl.hpp" // uint_bounds needed
+ #include "fitsfiles.hpp"
+ #include "service_string.hpp" // to_cftsio_format() needed
+@@ -41,14 +43,17 @@ namespace vlkb
+ 
+    void usage(const std::string progname)
+    {
+-      std::cerr
+-         << "Usage: " << progname << " <command> [cmd-options] [cmd-args]" << endl
+-         << "\n where commands are:\n "
+-         << "\n\t cutout imcopy imcopydav cutpixels multicutout mergefiles\n"
+-         << "\n\t listbounds header headermodif headerwcs skyvertices overlap\n"
+-         << "\n\t nullvals dropdegen checkcard addcard modcard rawdelcard\n"
+-         << std::endl
+-         << "Version: " << VERSIONSTR << " " << BUILD << std::endl;
++      std::cerr << "Usage: " << progname << " <command> [cmd-options] [cmd-args]" << endl
++                << "\n where commands are:\n ";
++#if VLKB_WITH_DAVIX
++      std::cerr << "\n\t cutout imcopy imcopydav cutpixels multicutout mergefiles\n";
++#else
++      std::cerr << "\n\t cutout imcopy cutpixels multicutout mergefiles\n";
++#endif
++      std::cerr << "\n\t listbounds header headermodif headerwcs skyvertices overlap\n"
++                << "\n\t nullvals dropdegen checkcard addcard modcard rawdelcard\n"
++                << std::endl
++                << "Version: " << VERSIONSTR << " " << BUILD << std::endl;
+    }
+ 
+ 
+@@ -56,7 +61,11 @@ namespace vlkb
+    // program recognizes following commands
+ 
+    enum cmd_set {
+-      multicutout, mergefiles, cutout, imcopy, imcopydav, cutpixels,
++      multicutout, mergefiles, cutout, imcopy,
++#if VLKB_WITH_DAVIX
++      imcopydav,
++#endif
++      cutpixels,
+       listbounds, header, headermodif, headerwcs, overlap, skyvertices,
+       nullvals, dropdegen, checkcard, addcard, modcard, rawdelcard};
+ 
+@@ -71,7 +80,9 @@ namespace vlkb
+       else if(cmdstr.compare("mergefiles") == 0)   cmd = mergefiles;
+       else if(cmdstr.compare("cutout") == 0)       cmd = cutout;
+       else if(cmdstr.compare("imcopy") == 0)       cmd = imcopy;
++#if VLKB_WITH_DAVIX
+       else if(cmdstr.compare("imcopydav") == 0)    cmd = imcopydav;
++#endif
+       else if(cmdstr.compare("cutpixels") == 0)    cmd = cutpixels;
+       else if(cmdstr.compare("listbounds") == 0)   cmd = listbounds;
+       else if(cmdstr.compare("header") == 0)       cmd = header;
+@@ -220,6 +231,7 @@ int cmd_imcopy(int argc, char * argv[])
+ }
+ 
+ 
++#if VLKB_WITH_DAVIX
+ int cmd_imcopydav(int argc, char * argv[])
+ {
+    if(argc == 4)
+@@ -250,6 +262,7 @@ int cmd_imcopydav(int argc, char * argv[])
+       return EXIT_FAILURE;
+    }
+ }
++#endif
+ 
+ 
+ 
+@@ -755,7 +768,9 @@ int main (int argc, char * argv[])
+       {
+          case vlkb::cutout:      rc = cmd_cutout(cmd_argc, cmd_argv); break;
+          case vlkb::imcopy:      rc = cmd_imcopy(cmd_argc, cmd_argv); break;
++#if VLKB_WITH_DAVIX
+          case vlkb::imcopydav:   rc = cmd_imcopydav(cmd_argc, cmd_argv); break;
++#endif
+          case vlkb::cutpixels:   rc = cmd_cutpixels(cmd_argc, cmd_argv); break;
+          case vlkb::multicutout: rc = cmd_multicutout(cmd_argc, cmd_argv); break;
+          case vlkb::mergefiles:  rc = cmd_mergefiles(cmd_argc, cmd_argv); break;

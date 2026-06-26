@@ -1,0 +1,68 @@
+# Local upstream checkouts used while developing the benchmark harness.
+# The public repo keeps benchmark scripts and patches, not full third-party trees
+# with private/site config examples.
+/subfits/
+/vlkb-soda/
+
+# Generated benchmark outputs.
+/dug-results/
+/results/
+**/results/
+**/seff/
+**/sacct/
+**/slurm-*.out
+**/slurm-*.err
+**/job-env.txt
+**/lscpu.txt
+**/numactl-hardware.txt
+**/controller.stdout
+**/controller.stderr
+**/manifest.tsv
+**/manifest_enriched.tsv
+**/summary.csv
+**/summary.md
+**/location_matrix_summary.csv
+**/location_matrix_summary.md
+**/error_scan.csv
+**/session.json
+**/.run_location_matrix.lock
+
+# Large data products and scratch files.
+*.fits
+*.fit
+*.fits.gz
+*.fit.gz
+*.fz
+*.tmp
+*.part
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Python/editor noise.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Secrets and local credentials.
+credentials.json
+*.credentials.json
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+*.pwd
+.env
+.env.*
+
+# OS noise.
+.DS_Store
+Thumbs.db

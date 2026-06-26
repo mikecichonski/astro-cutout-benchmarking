@@ -1,0 +1,644 @@
+diff --git a/data-access/engine/src/common/Makefile b/data-access/engine/src/common/Makefile
+index cfe6979..278385b 100644
+--- a/data-access/engine/src/common/Makefile
++++ b/data-access/engine/src/common/Makefile
+@@ -6,10 +6,12 @@ BUILD_ ?= $(shell LANG=us_US date; hostname)
+ DEPS_DIR := ../../ext/nlohmann-json
+ DEPS_INC := $(DEPS_DIR)/include
+ #DEPS_LIB := $(DEPS_DIR)/lib
++EXTRA_INC_DIR ?=
+ #================================================================================
+ INC_DIR=src include $(DEPS_INC) \
+ 	/usr/include/cfitsio \
+-	/usr/include/postgresql
++	/usr/include/postgresql \
++	$(EXTRA_INC_DIR)
+ #================================================================================
+ CC=g++
+ CXX_DEBUG_FLAGS=-g -DFDB_DEBUG
+@@ -29,7 +31,7 @@ C_OBJ_FILES := $(addprefix $(OBJ_DIR)/,$(notdir $(C_FILES:.c=.o)))
+ # defer eval when objs were created 
+ DEPS_OBJ_FILES = $(wildcard $(DEPS_DIR)/obj/*.o)
+ #================================================================================
+-NPROCS = $(shell grep -c 'processor' /proc/cpuinfo)
++NPROCS ?= 1
+ MAKEFLAGS += -j$(NPROCS)
+ #================================================================================
+ .PHONY: all
+diff --git a/data-access/engine/src/common/src/m4vl.cpp b/data-access/engine/src/common/src/m4vl.cpp
+index 68f6e27..c42d9bc 100644
+--- a/data-access/engine/src/common/src/m4vl.cpp
++++ b/data-access/engine/src/common/src/m4vl.cpp
+@@ -13,6 +13,7 @@
+ #include <dirent.h> // dir handling
+ #include <libgen.h> // basename
+ #include <limits.h> //OPEN_MAX
++#include <stdexcept>
+ 
+ #include <linux/limits.h> // PATH_MAX NAME_MAX
+ 
+diff --git a/data-access/engine/src/vlkb/Makefile b/data-access/engine/src/vlkb/Makefile
+index 8511125..d559049 100644
+--- a/data-access/engine/src/vlkb/Makefile
++++ b/data-access/engine/src/vlkb/Makefile
+@@ -5,30 +5,53 @@ DEBUG_LEV=-v1
+ INSTALL_DIR=/usr/local
+ VERSION ?= $(shell git describe)
+ TAR_NAME := `basename $(PWD)`
++NO_DAVIX ?= 0
++NO_CSV ?= 0
+ #================================================================================
+ DEPS_DIR := ../common ../../ext/aria-csv ../../ext/nlohmann-json
+ DEPS_INC := $(foreach d, $(DEPS_DIR), $d/include)
+ DEPS_LIB := $(foreach d, $(DEPS_DIR), $d/lib)
++EXTRA_INC_DIR ?=
++EXTRA_LIB_DIR ?=
+ #================================================================================
+ INC_DIR = $(DEPS_INC) \
+-	  /usr/include/davix \
+ 	  /usr/include/cfitsio \
+ 	  /usr/local/include \
+-	  /usr/local/cfitsio/include
++	  /usr/local/cfitsio/include \
++	  $(EXTRA_INC_DIR)
+ LIB_DIR = $(DEPS_LIB) \
+ 	  /usr/local/lib \
+-	  /usr/local/cfitsio/lib
++	  /usr/local/cfitsio/lib \
++	  $(EXTRA_LIB_DIR)
+ #================================================================================
++ifeq ($(NO_DAVIX),1)
++DAVIX_INC :=
++DAVIX_LIB :=
++DAVIX_SRC = $(SRC_DIR)/imcopydav.cpp
++VLKB_WITH_DAVIX := 0
++else
++DAVIX_INC := /usr/include/davix
++DAVIX_LIB := -ldavix
++DAVIX_SRC :=
++VLKB_WITH_DAVIX := 1
++endif
++
++ifeq ($(NO_CSV),1)
++CSV_LIB :=
++else
++CSV_LIB := -lcsv
++endif
++
+ CC=g++
+ CFLAGS_DEBUG   = -g -DFDB_DEBUG
+ CFLAGS_RELEASE = -O2 
+ FLAGS_COMMON   = -fPIC -Wall -Wextra -Wconversion -fno-common -pthread -DVERSIONSTR='"$(VERSION)"' \
+--DBUILD='"$(shell LANG=us_US date; hostname)"'
++-DBUILD='"$(shell LANG=us_US date; hostname)"' -DVLKB_WITH_DAVIX=$(VLKB_WITH_DAVIX)
+ CFLAGS_COMMON   = -c -Wstrict-prototypes $(FLAGS_COMMON)
+ CXX_DEBUG_FLAGS   = -g -DVERBOSE_DEBUG -DFDB_DEBUG
+ CXX_RELEASE_FLAGS = -O3
+ CXX_DEFAULT_FLAGS = -c -std=c++11 $(FLAGS_COMMON)
+-LDFLAGS = -Wall -lvlkbcommon -ldavix -lcfitsio -lcsv -last -last_pal -last_cminpack -last_grf_2.0 -last_grf_3.2 -last_grf_5.6 -last_grf3d -last_err -lstdc++ -lm  
++LDFLAGS = -Wall -lvlkbcommon $(DAVIX_LIB) -lcfitsio $(CSV_LIB) -last -last_pal -last_cminpack -last_grf_2.0 -last_grf_3.2 -last_grf_5.6 -last_grf3d -last_err -lstdc++ -lm  
+ INC_PARM=$(foreach d, $(INC_DIR), -I$d)
+ LIB_PARM=$(foreach d, $(LIB_DIR), -L$d)
+ #================================================================================
+@@ -36,14 +59,14 @@ EXT_DIR = ext
+ SRC_DIR = src
+ OBJ_DIR = obj
+ BIN_DIR = bin
+-INC_PARM += -I$(EXT_DIR)/include -I$(SRC_DIR)
++INC_PARM += -I$(EXT_DIR)/include -I$(SRC_DIR) $(foreach d, $(DAVIX_INC), -I$d)
+ LIB_PARM += -L$(EXT_DIR)/lib
+ #================================================================================
+ EXECUTABLE = $(BIN_DIR)/$(EXEC_NAME)
+-CPP_FILES  = $(wildcard $(SRC_DIR)/*.cpp)
++CPP_FILES  = $(filter-out $(DAVIX_SRC),$(wildcard $(SRC_DIR)/*.cpp))
+ OBJ_FILES  = $(addprefix $(OBJ_DIR)/,$(notdir $(CPP_FILES:.cpp=.o))) 
+ #================================================================================
+-NPROCS = $(shell grep -c 'processor' /proc/cpuinfo)
++NPROCS ?= 1
+ MAKEFLAGS += -j$(NPROCS)
+ #================================================================================
+ .PHONY: all debug release clean
+diff --git a/data-access/engine/src/vlkb/src/imcopy.cpp b/data-access/engine/src/vlkb/src/imcopy.cpp
+index c4df34c..3274483 100644
+--- a/data-access/engine/src/vlkb/src/imcopy.cpp
++++ b/data-access/engine/src/vlkb/src/imcopy.cpp
+@@ -20,6 +20,31 @@
+ using namespace std;
+ 
+ 
++static const long DEFAULT_ROWS_PER_CHUNK = 1;
++
++
++static long vlkb_rows_per_chunk_from_env()
++{
++	const char *env_value = getenv("VLKB_ROWS_PER_CHUNK");
++	if (env_value == NULL || env_value[0] == '\0')
++		return DEFAULT_ROWS_PER_CHUNK;
++
++	char *endptr = NULL;
++	errno = 0;
++	long rows_per_chunk = strtol(env_value, &endptr, 10);
++	if (errno || endptr == env_value || (endptr != NULL && *endptr != '\0') || rows_per_chunk < 1)
++		return DEFAULT_ROWS_PER_CHUNK;
++
++	return rows_per_chunk;
++}
++
++
++static long normalize_rows_per_chunk(long rows_per_chunk)
++{
++	return rows_per_chunk < 1 ? DEFAULT_ROWS_PER_CHUNK : rows_per_chunk;
++}
++
++
+ 
+ int stream_cutout(string pathname, int extnum, string region)
+ {
+@@ -52,17 +77,26 @@ int fits_copy_image_section2(
+ 		fitsfile *fptr,  /* I - pointer to input image */
+ 		fitsfile *newptr,  /* I - pointer to output image */
+ 		char *expr,       /* I - Image section expression    */
++		long rows_per_chunk,
+ 		int *status);
+ 
+ 
+ 
+ 
+ void imcopy(std::string filename, int extnum, std::string pixfilter)
++{
++	imcopy(filename, extnum, pixfilter, vlkb_rows_per_chunk_from_env());
++}
++
++
++void imcopy(std::string filename, int extnum, std::string pixfilter, long rows_per_chunk)
+ {
+ 	LOG_trace(__func__);
+ 
+ 	LOG_STREAM << filename << " EXT: " << extnum << endl;
+ 	LOG_STREAM << "pixfilter: " << pixfilter << endl;
++	rows_per_chunk = normalize_rows_per_chunk(rows_per_chunk);
++	LOG_STREAM << "rows_per_chunk: " << rows_per_chunk << endl;
+ 
+ 	int status = 0;
+ 
+@@ -104,7 +138,7 @@ void imcopy(std::string filename, int extnum, std::string pixfilter)
+ #define HEADER_TOO_LONG (10000)
+ #define MAX_CARD_COUNT (1400)
+ 	/* see notes about stream driver in cfitsio manual */
+-	fits_copy_image_section2(fptr, newfptr, expr, &status);
++	fits_copy_image_section2(fptr, newfptr, expr, rows_per_chunk, &status);
+ 	if (status)
+ 	{
+ 		int tstatus = 0;
+@@ -158,6 +192,7 @@ int fits_copy_image_section2(
+ 		fitsfile *fptr,  /* I - pointer to input image */
+ 		fitsfile *newptr,  /* I - pointer to output image */
+ 		char *expr,       /* I - Image section expression    */
++		long rows_per_chunk,
+ 		int *status)
+ {
+ 	/* copies an image section from the input file to a new output HDU */
+@@ -173,7 +208,7 @@ int fits_copy_image_section2(
+ 	long firstpix;
+ 	long ncubeiter, nsliceiter, nrowiter, kiter, jiter, iiter;
+ 	int klen, kk, jj;
+-	long outnaxes[9], outsize, buffsize;
++	long outnaxes[9], outsize, buffsize, row_outsize, rows_this;
+ 	double *buffer, crpix, cdelt;
+ 
+ 	if (*status > 0)
+@@ -363,9 +398,11 @@ int fits_copy_image_section2(
+ 	fits_set_bscale(fptr,  1.0, 0.0, status);
+ 	fits_set_bscale(newptr, 1.0, 0.0, status);
+ 
+-	/* to reduce memory foot print, just read/write image 1 row at a time */
++	/* Read/write rows in configurable chunks.  The historical default is 1 row. */
+ 
+-	outsize = outnaxes[0];
++	row_outsize = outnaxes[0];
++	rows_per_chunk = normalize_rows_per_chunk(rows_per_chunk);
++	outsize = row_outsize * rows_per_chunk;
+ 	buffsize = (abs(bitpix) / 8) * outsize;
+ 
+ 	buffer = (double *) malloc(buffsize); /* allocate memory for the image row */
+@@ -421,15 +458,18 @@ int fits_copy_image_section2(
+ 
+ 			lpixels[2] = fpixels[2];
+ 
+-			for (iiter = 0; iiter < nrowiter; iiter++)
++			for (iiter = 0; iiter < nrowiter; iiter += rows_this)
+ 			{
++				rows_this = std::min(rows_per_chunk, nrowiter - iiter);
+ 				if (minrow > maxrow) {
+ 					fpixels[1] = minrow - (iiter * incs[1]);
++					lpixels[1] = fpixels[1] - ((rows_this - 1) * incs[1]);
+ 				} else {
+ 					fpixels[1] = minrow + (iiter * incs[1]);
++					lpixels[1] = fpixels[1] + ((rows_this - 1) * incs[1]);
+ 				}
+ 
+-				lpixels[1] = fpixels[1];
++				outsize = row_outsize * rows_this;
+ 
+ 				if (bitpix == 8)
+ 				{
+diff --git a/data-access/engine/src/vlkb/src/imcopy.hpp b/data-access/engine/src/vlkb/src/imcopy.hpp
+index 2b595a0..1fafed0 100644
+--- a/data-access/engine/src/vlkb/src/imcopy.hpp
++++ b/data-access/engine/src/vlkb/src/imcopy.hpp
+@@ -4,6 +4,6 @@
+ #include <string>
+ 
+ void imcopy(std::string filename, int extnum, std::string pixfilter);
++void imcopy(std::string filename, int extnum, std::string pixfilter, long rows_per_chunk);
+ int stream_cutout(std::string pathname, int extnum, std::string region);
+ #endif
+-
+diff --git a/data-access/engine/src/vlkb/src/imcopydav.cpp b/data-access/engine/src/vlkb/src/imcopydav.cpp
+index 182cc83..69e3733 100644
+--- a/data-access/engine/src/vlkb/src/imcopydav.cpp
++++ b/data-access/engine/src/vlkb/src/imcopydav.cpp
+@@ -1,15 +1,45 @@
+ 
+ #include <davix/davix.hpp>
+ #include <fitsio.h>
++#include <algorithm>
+ #include <cstring>
+ #include <iomanip>
++#include <cerrno>
++#include <cstdlib>
++#include <vector>
+ 
+ #include "fitsfiles.hpp"
++#include "imcopydav.hpp"
+ #include "io.hpp"
+ 
+ using namespace Davix;
+ using namespace std;
+ 
++static const long DEFAULT_ROWS_PER_CHUNK = 1;
++
++
++static long vlkb_rows_per_chunk_from_env()
++{
++   const char *env_value = getenv("VLKB_ROWS_PER_CHUNK");
++   if (env_value == NULL || env_value[0] == '\0')
++      return DEFAULT_ROWS_PER_CHUNK;
++
++   char *endptr = NULL;
++   errno = 0;
++   long rows_per_chunk = strtol(env_value, &endptr, 10);
++   if (errno || endptr == env_value || (endptr != NULL && *endptr != '\0') || rows_per_chunk < 1)
++      return DEFAULT_ROWS_PER_CHUNK;
++
++   return rows_per_chunk;
++}
++
++
++static long normalize_rows_per_chunk(long rows_per_chunk)
++{
++   return rows_per_chunk < 1 ? DEFAULT_ROWS_PER_CHUNK : rows_per_chunk;
++}
++
++
+ class dav
+ {
+    public:
+@@ -142,11 +172,11 @@ class dav
+ // 'The fpixel and lpixel parameters are integer arrays which specify the starting
+ // and ending pixel coordinate in each dimension (starting with 1, not 0) of the FITS image'
+       int ffgsv(int bitpix,
+-            int naxis, /*long *naxes,*/
+-            long *fpixel, /*long *lpixel, long *inc,*/ long arraylen,
++            int naxis, long *naxes,
++            long *fpixel, long *lpixel, long *inc, long arraylen,
+             /*char nulval,*/ char *array, /*int *anynul,*/ int *status )
+       {
+-         //assert( fpixel[0] <= lpixel[0] );
++         const int bytepix = abs(bitpix)/8;
+ 
+          dav_off_t pixels_off = 0;
+          for(int i=(naxis-1); i>=0; i--)
+@@ -156,7 +186,57 @@ class dav
+ 
+          dav_off_t doff = du_firstbyte_cix + (abs(bitpix)/8) * pixels_off;
+ 
+-         this->file.readPartial(NULL, array, arraylen, doff, &err);
++         long x_count = 1;
++         long y_count = 1;
++         if(naxis >= 1)
++            x_count = labs(lpixel[0] - fpixel[0]) / inc[0] + 1;
++         if(naxis >= 2)
++            y_count = labs(lpixel[1] - fpixel[1]) / inc[1] + 1;
++
++         if(y_count <= 1 || x_count == naxes[0])
++         {
++            this->file.readPartial(NULL, array, arraylen, doff, &err);
++            return *status;
++         }
++
++         if((naxis >= 2) && (inc[0] == 1) && (inc[1] == 1)
++               && (fpixel[0] <= lpixel[0]) && (fpixel[1] <= lpixel[1]))
++         {
++            const long coalesced_pixels = ((y_count - 1) * naxes[0]) + x_count;
++            const long coalesced_bytes = coalesced_pixels * bytepix;
++            vector<char> row_span(static_cast<size_t>(coalesced_bytes));
++            this->file.readPartial(NULL, row_span.data(), coalesced_bytes, doff, &err);
++
++            const long output_row_bytes = x_count * bytepix;
++            const long input_row_bytes = naxes[0] * bytepix;
++            for(long row = 0; row < y_count; row++)
++            {
++               memcpy(
++                     array + (row * output_row_bytes),
++                     row_span.data() + (row * input_row_bytes),
++                     static_cast<size_t>(output_row_bytes));
++            }
++            return *status;
++         }
++
++         const long output_row_bytes = x_count * bytepix;
++         long row_fpixel[9];
++         for(int axis = 0; axis < 9; axis++)
++            row_fpixel[axis] = fpixel[axis];
++         for(long row = 0; row < y_count; row++)
++         {
++            row_fpixel[1] = fpixel[1] + ((fpixel[1] <= lpixel[1] ? row : -row) * inc[1]);
++            dav_off_t row_pixels_off = 0;
++            for(int i=(naxis-1); i>=0; i--)
++               row_pixels_off += (row_fpixel[i]-1) * volume[i];
++            dav_off_t row_doff = du_firstbyte_cix + bytepix * row_pixels_off;
++            this->file.readPartial(
++                  NULL,
++                  array + (row * output_row_bytes),
++                  output_row_bytes,
++                  row_doff,
++                  &err);
++         }
+ 
+          return *status;
+       }
+@@ -262,6 +342,7 @@ int fits_copy_image_section3(
+       dav fdav,  /* I - dav handle to FITS-file */
+       fitsfile *newptr,  /* I - pointer to output image */
+       char *expr,       /* I - Image section expression    */
++      long rows_per_chunk,
+       int *status)
+ {
+    int bitpix, naxis, numkeys, morekeys, nkey;
+@@ -275,7 +356,7 @@ int fits_copy_image_section3(
+    long firstpix;
+    long ncubeiter, nsliceiter, nrowiter, kiter, jiter, iiter;
+    int klen, kk, jj;
+-   long outnaxes[9], outsize, buffsize;
++   long outnaxes[9], outsize, buffsize, chunk_buffsize, row_outsize, rows_this;
+    double *buffer, crpix, cdelt;
+ 
+    if (*status > 0)
+@@ -480,9 +561,11 @@ int fits_copy_image_section3(
+    // NOTE not needed: we just copy data unchanged fits_set_bscale(fptr,  1.0, 0.0, status);
+    fits_set_bscale(newptr, 1.0, 0.0, status);
+ 
+-   /* to reduce memory foot print, just read/write image 1 row at a time */
++   /* Read/write rows in configurable chunks.  The historical default is 1 row. */
+ 
+-   outsize = outnaxes[0];
++   row_outsize = outnaxes[0];
++   rows_per_chunk = normalize_rows_per_chunk(rows_per_chunk);
++   outsize = row_outsize * rows_per_chunk;
+    buffsize = (abs(bitpix) / 8) * outsize;
+ 
+    LOG_STREAM << "outsize / buffsize : " << outsize << " / " << buffsize << endl;
+@@ -540,21 +623,25 @@ int fits_copy_image_section3(
+ 
+          lpixels[2] = fpixels[2];
+ 
+-         for (iiter = 0; iiter < nrowiter; iiter++)
++         for (iiter = 0; iiter < nrowiter; iiter += rows_this)
+          {
++            rows_this = std::min(rows_per_chunk, nrowiter - iiter);
+             if (minrow > maxrow) {
+                fpixels[1] = minrow - (iiter * incs[1]);
++               lpixels[1] = fpixels[1] - ((rows_this - 1) * incs[1]);
+             } else {
+                fpixels[1] = minrow + (iiter * incs[1]);
++               lpixels[1] = fpixels[1] + ((rows_this - 1) * incs[1]);
+             }
+ 
+-            lpixels[1] = fpixels[1];
++            outsize = row_outsize * rows_this;
++            chunk_buffsize = (abs(bitpix) / 8) * outsize;
+ 
+             //
+             fdav.ffgsv(bitpix, naxis, /*naxes,*/
+-                  fpixels, buffsize, /*0,*/ (char*)buffer, /*NULL,*/ status);
++                  naxes, fpixels, lpixels, incs, chunk_buffsize, /*0,*/ (char*)buffer, /*NULL,*/ status);
+ 
+-            endianess(bitpix, buffsize, (char*)buffer);
++            endianess(bitpix, chunk_buffsize, (char*)buffer);
+ 
+             if (bitpix == 8)
+             {
+@@ -599,10 +686,18 @@ int fits_copy_image_section3(
+ }
+ 
+ void imcopydav(std::string url, int extnum, std::string pixfilter)
++{
++   imcopydav(url, extnum, pixfilter, vlkb_rows_per_chunk_from_env());
++}
++
++
++void imcopydav(std::string url, int extnum, std::string pixfilter, long rows_per_chunk)
+ {
+    LOG_trace(__func__);
+    LOG_STREAM << url << " EXT: " << extnum << endl;
+    LOG_STREAM << "pixfilter: " << pixfilter << endl;
++   rows_per_chunk = normalize_rows_per_chunk(rows_per_chunk);
++   LOG_STREAM << "rows_per_chunk: " << rows_per_chunk << endl;
+ 
+    int status = 0;
+ 
+@@ -630,7 +725,7 @@ void imcopydav(std::string url, int extnum, std::string pixfilter)
+    }
+ 
+ 
+-   fits_copy_image_section3(fdav, newfptr, expr, &status);
++   fits_copy_image_section3(fdav, newfptr, expr, rows_per_chunk, &status);
+    if (status)
+    {
+       int tstatus = 0;
+diff --git a/data-access/engine/src/vlkb/src/imcopydav.hpp b/data-access/engine/src/vlkb/src/imcopydav.hpp
+index 2147a68..cd4f457 100644
+--- a/data-access/engine/src/vlkb/src/imcopydav.hpp
++++ b/data-access/engine/src/vlkb/src/imcopydav.hpp
+@@ -4,7 +4,7 @@
+ #include <string>
+ 
+ void imcopydav(std::string url, int extnum, std::string pixfilter);
++void imcopydav(std::string url, int extnum, std::string pixfilter, long rows_per_chunk);
+ int stream_cutout_dav(std::string url, int extnum, std::string region);
+ 
+ #endif
+-
+diff --git a/data-access/engine/src/vlkb/src/main.cpp b/data-access/engine/src/vlkb/src/main.cpp
+index c23d0ad..d941ebf 100644
+--- a/data-access/engine/src/vlkb/src/main.cpp
++++ b/data-access/engine/src/vlkb/src/main.cpp
+@@ -5,7 +5,9 @@
+ #include "multicutout.hpp"
+ #include "ast.hpp"
+ #include "imcopy.hpp" // imcopy() vlkb_cutout()
++#if VLKB_WITH_DAVIX
+ #include "imcopydav.hpp" // imcopydav()
++#endif
+ #include "ast4vl.hpp" // uint_bounds needed
+ #include "fitsfiles.hpp"
+ #include "service_string.hpp" // to_cftsio_format() needed
+@@ -41,14 +43,17 @@ namespace vlkb
+ 
+    void usage(const std::string progname)
+    {
+-      std::cerr
+-         << "Usage: " << progname << " <command> [cmd-options] [cmd-args]" << endl
+-         << "\n where commands are:\n "
+-         << "\n\t cutout imcopy imcopydav cutpixels multicutout mergefiles\n"
+-         << "\n\t listbounds header headermodif headerwcs skyvertices overlap\n"
+-         << "\n\t nullvals dropdegen checkcard addcard modcard rawdelcard\n"
+-         << std::endl
+-         << "Version: " << VERSIONSTR << " " << BUILD << std::endl;
++      std::cerr << "Usage: " << progname << " <command> [cmd-options] [cmd-args]" << endl
++                << "\n where commands are:\n ";
++#if VLKB_WITH_DAVIX
++      std::cerr << "\n\t cutout imcopy imcopydav cutpixels multicutout mergefiles\n";
++#else
++      std::cerr << "\n\t cutout imcopy cutpixels multicutout mergefiles\n";
++#endif
++      std::cerr << "\n\t listbounds header headermodif headerwcs skyvertices overlap\n"
++                << "\n\t nullvals dropdegen checkcard addcard modcard rawdelcard\n"
++                << std::endl
++                << "Version: " << VERSIONSTR << " " << BUILD << std::endl;
+    }
+ 
+ 
+@@ -56,7 +61,11 @@ namespace vlkb
+    // program recognizes following commands
+ 
+    enum cmd_set {
+-      multicutout, mergefiles, cutout, imcopy, imcopydav, cutpixels,
++      multicutout, mergefiles, cutout, imcopy,
++#if VLKB_WITH_DAVIX
++      imcopydav,
++#endif
++      cutpixels,
+       listbounds, header, headermodif, headerwcs, overlap, skyvertices,
+       nullvals, dropdegen, checkcard, addcard, modcard, rawdelcard};
+ 
+@@ -71,7 +80,9 @@ namespace vlkb
+       else if(cmdstr.compare("mergefiles") == 0)   cmd = mergefiles;
+       else if(cmdstr.compare("cutout") == 0)       cmd = cutout;
+       else if(cmdstr.compare("imcopy") == 0)       cmd = imcopy;
++#if VLKB_WITH_DAVIX
+       else if(cmdstr.compare("imcopydav") == 0)    cmd = imcopydav;
++#endif
+       else if(cmdstr.compare("cutpixels") == 0)    cmd = cutpixels;
+       else if(cmdstr.compare("listbounds") == 0)   cmd = listbounds;
+       else if(cmdstr.compare("header") == 0)       cmd = header;
+@@ -95,6 +106,17 @@ namespace vlkb
+       return cmd;
+    }
+ 
++
++   long optional_rows_per_chunk(int argc, char * argv[], int index)
++   {
++      if(argc <= index) return 0;
++
++      long rows_per_chunk = std::stol(std::string{argv[index]});
++      if(rows_per_chunk < 1)
++         throw invalid_argument("rows-per-chunk must be >= 1");
++      return rows_per_chunk;
++   }
++
+ } // namespce
+ 
+ 
+@@ -190,14 +212,18 @@ int cmd_mergefiles(int argc, char * argv[])
+ 
+ int cmd_imcopy(int argc, char * argv[])
+ {
+-   if(argc == 4)
++   if(argc == 4 || argc == 5)
+    {
+       std::string infilename{argv[1]};
+       int extnum = std::stoi(std::string{argv[2]});
+       std::string pixfilter{argv[3]};
+       try
+       {
+-         imcopy(infilename, extnum, pixfilter);
++         long rows_per_chunk = vlkb::optional_rows_per_chunk(argc, argv, 4);
++         if(rows_per_chunk > 0)
++            imcopy(infilename, extnum, pixfilter, rows_per_chunk);
++         else
++            imcopy(infilename, extnum, pixfilter);
+       }
+       catch(const std::exception & ex)
+       {
+@@ -209,7 +235,7 @@ int cmd_imcopy(int argc, char * argv[])
+    else
+    {
+       std::cerr
+-         << "Usage:  imcopy filename.fits extnum [a:b c:d ...]\n"
++         << "Usage:  imcopy filename.fits extnum [a:b c:d ...] [rows-per-chunk]\n"
+          << "\n"
+          << "Send to stdout a subimage of N-dimesional FITS-file HDU with N-element pixel filter.\n"
+          << "HDU is given by extension number (0=Primary HDU, 1=Ext1, ...)"
+@@ -220,16 +246,21 @@ int cmd_imcopy(int argc, char * argv[])
+ }
+ 
+ 
++#if VLKB_WITH_DAVIX
+ int cmd_imcopydav(int argc, char * argv[])
+ {
+-   if(argc == 4)
++   if(argc == 4 || argc == 5)
+    {
+       std::string url{argv[1]};
+       int extnum = std::stoi(std::string{argv[2]});
+       std::string pixfilter{argv[3]};
+       try
+       {
+-         imcopydav(url, extnum, pixfilter);
++         long rows_per_chunk = vlkb::optional_rows_per_chunk(argc, argv, 4);
++         if(rows_per_chunk > 0)
++            imcopydav(url, extnum, pixfilter, rows_per_chunk);
++         else
++            imcopydav(url, extnum, pixfilter);
+       }
+       catch(const std::exception & ex)
+       {
+@@ -241,7 +272,7 @@ int cmd_imcopydav(int argc, char * argv[])
+    else
+    {
+       std::cerr
+-         << "Usage:  imcopydav url extnum [a:b c:d ...]\n"
++         << "Usage:  imcopydav url extnum [a:b c:d ...] [rows-per-chunk]\n"
+          << "\n"
+          << "Send to stdout a subimage of N-dimesional FITS-file HDU with N-element pixel filter.\n"
+          << "HDU is given by extension number (0=Primary HDU, 1=Ext1, ...)"
+@@ -250,6 +281,7 @@ int cmd_imcopydav(int argc, char * argv[])
+       return EXIT_FAILURE;
+    }
+ }
++#endif
+ 
+ 
+ 
+@@ -755,7 +787,9 @@ int main (int argc, char * argv[])
+       {
+          case vlkb::cutout:      rc = cmd_cutout(cmd_argc, cmd_argv); break;
+          case vlkb::imcopy:      rc = cmd_imcopy(cmd_argc, cmd_argv); break;
++#if VLKB_WITH_DAVIX
+          case vlkb::imcopydav:   rc = cmd_imcopydav(cmd_argc, cmd_argv); break;
++#endif
+          case vlkb::cutpixels:   rc = cmd_cutpixels(cmd_argc, cmd_argv); break;
+          case vlkb::multicutout: rc = cmd_multicutout(cmd_argc, cmd_argv); break;
+          case vlkb::mergefiles:  rc = cmd_mergefiles(cmd_argc, cmd_argv); break;
